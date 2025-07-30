@@ -1,105 +1,175 @@
-function getText(selector) {
-  const el = document.querySelector(selector);
-  return el ? el.innerText.trim() : "";
-}
+document.addEventListener("DOMContentLoaded", () => {
+    fetchAndDisplayProfiles(); // Load saved profiles
 
-function getTextMultipleSelectors(selectors) {
-  for (const selector of selectors) {
-    const text = getText(selector);
-    if (text) return text;
-  }
-  return "";
-}
+    document
+        .getElementById("refreshBtn")
+        ?.addEventListener("click", fetchAndDisplayProfiles);
 
-function extractProfileData() {
-  // Try multiple selectors for name - LinkedIn changes these frequently
-  const nameSelectors = [
-    "h1.text-heading-xlarge",
-    "h1.text-heading-xlarge.inline.t-24.v-align-middle.break-words",
-    "h1[data-generated-suggestion-target]",
-    ".pv-text-details__left-panel h1",
-    ".ph5.pb5 h1",
-    "section.pv-top-card div h1",
-    "h1.break-words",
-    ".pv-top-card--list h1",
-    "[data-anonymize='person-name'] h1",
-    "main h1"
-  ];
+    document.getElementById("scrapeBtn")?.addEventListener("click", async () => {
+        const urls = document
+            .getElementById("urlInput")
+            .value.split("\n")
+            .map((url) => url.trim())
+            .filter((url) => url);
 
-  const name = getTextMultipleSelectors(nameSelectors);
-  
-  // Also try multiple selectors for headline
-  const headlineSelectors = [
-    ".text-body-medium.break-words",
-    ".pv-text-details__left-panel .text-body-medium",
-    ".ph5.pb5 .text-body-medium",
-    ".pv-top-card div.text-body-medium"
-  ];
-  
-  const headline = getTextMultipleSelectors(headlineSelectors);
-  
-  // Location selectors
-  const locationSelectors = [
-    ".text-body-small.inline.t-black--light.break-words",
-    ".pv-text-details__left-panel .text-body-small",
-    ".ph5.pb5 .text-body-small"
-  ];
-  
-  const location = getTextMultipleSelectors(locationSelectors);
-  
-  const about = getText("#about ~ div .pv-shared-text-with-see-more") || 
-                getText(".pv-about-section .pv-shared-text-with-see-more") ||
-                getText("[data-section='summary'] .pv-shared-text-with-see-more");
-  
-  const bio = getText(".pv-text-details__left-panel");
+        if (urls.length === 0) {
+            alert("Please enter at least one LinkedIn URL");
+            return;
+        }
 
-  const spans = Array.from(document.querySelectorAll("span"));
-  const followersSpan = spans.find(s => s.innerText.toLowerCase().includes("followers"));
-  const connectionsSpan = spans.find(s => s.innerText.toLowerCase().includes("connections"));
-
-  const followerText = followersSpan ? followersSpan.innerText : "";
-  const connectionText = connectionsSpan ? connectionsSpan.innerText : "";
-
-  // Debug logging
-  console.log("🔍 Debug info:");
-  console.log("Name found:", name);
-  console.log("Headline found:", headline);
-  console.log("Location found:", location);
-  
-  // If name is still empty, try one more aggressive approach
-  let finalName = name;
-  if (!finalName) {
-    // Look for any h1 with text content in the main area
-    const h1Elements = Array.from(document.querySelectorAll('h1'));
-    const nameH1 = h1Elements.find(h1 => {
-      const text = h1.innerText.trim();
-      return text && text.length > 0 && text.length < 100; // Reasonable name length
+        for (let url of urls) {
+            chrome.tabs.create({ url, active: false }, (tab) => {
+                const checkTabLoaded = setInterval(() => {
+                    chrome.tabs.get(tab.id, (updatedTab) => {
+                        if (updatedTab?.status === "complete") {
+                            clearInterval(checkTabLoaded);
+                            chrome.scripting.executeScript({
+                                target: { tabId: tab.id },
+                                files: ["content.js"],
+                            });
+                        }
+                    });
+                }, 1000);
+            });
+        }
     });
-    finalName = nameH1 ? nameH1.innerText.trim() : "";
-    console.log("Fallback name search result:", finalName);
-  }
 
-  return {
-    name: finalName,
-    headline,
-    location,
-    about,
-    bio,
-    follower_count: parseInt(followerText.replace(/\D/g, "")) || 0,
-    connection_count: parseInt(connectionText.replace(/\D/g, "")) || 0,
-    url: window.location.href,
-  };
+    document
+        .getElementById("clearDataBtn")
+        ?.addEventListener("click", async () => {
+            try {
+                const confirmed = confirm(
+                    "Are you sure you want to permanently delete all saved profile data?"
+                );
+                if (!confirmed) return;
+
+                const res = await fetch("http://localhost:5000/api/profiles", {
+                    method: "DELETE",
+                });
+                const json = await res.json();
+
+                if (res.ok) {
+                    alert("All profile data has been successfully deleted.");
+                    fetchAndDisplayProfiles();
+                } else {
+                    throw new Error(json.error || "Unknown error occurred");
+                }
+            } catch (err) {
+                alert("Failed to delete data: " + err.message);
+                console.error("Delete error:", err);
+            }
+        });
+});
+
+let isFetching = false;
+
+async function fetchAndDisplayProfiles() {
+    if (isFetching) return;
+    isFetching = true;
+
+    try {
+        const res = await fetch("http://localhost:5000/api/profiles");
+        const profiles = await res.json();
+        const list = document.getElementById("profileList");
+        list.innerHTML = "";
+
+        if (!Array.isArray(profiles) || profiles.length === 0) {
+            list.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">📋</div>
+          <div class="empty-state-text">No profiles collected yet</div>
+          <div class="empty-state-subtext">Add LinkedIn URLs above and click "Start Collection Process"</div>
+        </div>
+      `;
+            isFetching = false;
+            return;
+        }
+
+        const seen = new Set();
+        const uniqueProfiles = profiles.filter((p) => {
+            const key = p.url || p.name;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        uniqueProfiles.forEach((p) => {
+            const item = document.createElement("div");
+            item.className = "profile-card";
+            item.innerHTML = `
+        <div class="profile-name">${p.name || "Name not available"}</div>
+        <div class="profile-headline">${p.headline || "No headline provided"
+                }</div>
+        <div class="profile-location">${p.location || "Location not specified"
+                }</div>
+        <div class="profile-stats">
+           ${p.connection_count > 500 ? "500+" : p.connection_count || 0} connections • 
+           ${p.follower_count || 0} followers
+        </div>
+
+
+        ${p.bio
+                    ? `
+          <div class="profile-section">
+            <div class="profile-section-label">Bio</div>
+            <div class="profile-section-content">${p.bio}</div>
+          </div>
+        `
+                    : ""
+                }
+
+        ${p.about
+                    ? `
+          <div class="profile-section">
+            <div class="profile-section-label">About</div>
+            <div class="profile-section-content">${p.about}</div>
+          </div>
+        `
+                    : ""
+                }
+
+        <div class="profile-divider"></div>
+        <button class="delete-btn" data-id="${p.id}">Remove Profile</button>
+      `;
+            list.appendChild(item);
+        });
+
+        document.querySelectorAll(".delete-btn").forEach((btn) => {
+            btn.addEventListener("click", async (e) => {
+                const profileId = e.target.getAttribute("data-id");
+                if (confirm("Are you sure you want to remove this profile?")) {
+                    try {
+                        const res = await fetch(
+                            `http://localhost:5000/api/profiles/${profileId}`,
+                            {
+                                method: "DELETE",
+                            }
+                        );
+                        const json = await res.json();
+
+                        if (res.ok) {
+                            alert(json.message || "Profile deleted successfully.");
+                            fetchAndDisplayProfiles();
+                        } else {
+                            throw new Error(json.error || "Failed to delete");
+                        }
+                    } catch (err) {
+                        alert("Failed to delete profile: " + err.message);
+                        console.error("Profile deletion error:", err);
+                    }
+                }
+            });
+        });
+    } catch (error) {
+        console.error("Error fetching profiles:", error);
+        document.getElementById("profileList").innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">⚠️</div>
+        <div class="empty-state-text">Error loading profiles</div>
+        <div class="empty-state-subtext">Please check your connection and try again</div>
+      </div>
+    `;
+    } finally {
+        isFetching = false;
+    }
 }
-
-(async () => {
-  try {
-    const data = extractProfileData();
-    console.log("📤 Sending data to background:", data);
-
-    // Send to background
-    chrome.runtime.sendMessage({ action: "sendProfileData", data });
-
-  } catch (err) {
-    console.error("❌ Scraping error:", err);
-  }
-})();
