@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Profile Manager</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>LinkedIn Profile Manager</h1>
+            <p>Professional profile data collection tool</p>
+        </div>
+
+        <div class="form-section">
+            <label class="form-label" for="urlInput">LinkedIn Profile URLs</label>
+            <textarea id="urlInput" class="form-textarea"
+                placeholder="Enter LinkedIn URLs here, one per line"></textarea>
+        </div>
+
+        <div class="button-group">
+            <button id="scrapeBtn" class="btn btn-primary">Start Collection Process</button>
+            <button id="refreshBtn" class="btn btn-secondary">Collect Profile Data</button>
+            <button id="clearDataBtn" class="btn btn-danger">Clear All Saved Data</button>
+        </div>
+
+        <div class="section-header">Collected Profiles</div>
+        <div id="profileList" class="profile-list">
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-text">No profiles collected yet</div>
+                <div class="empty-state-subtext">Add LinkedIn URLs above and click "Start Collection Process"</div>
+            </div>
+        </div>
+    </div>
+    <div class="footer">
+        <p>&copy; 2023 LinkedIn Profile Manager</p>
+        <p>Developed by Sampad Mondal</p>
+    </div>
+    <script src="popup.js"></script>
+</body>
+
+</html>
