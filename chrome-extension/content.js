@@ -1,175 +1,109 @@
-document.addEventListener("DOMContentLoaded", () => {
-    fetchAndDisplayProfiles(); // Load saved profiles
+(async function () {
+    console.log("✅ content.js injected!");
 
-    document
-        .getElementById("refreshBtn")
-        ?.addEventListener("click", fetchAndDisplayProfiles);
-
-    document.getElementById("scrapeBtn")?.addEventListener("click", async () => {
-        const urls = document
-            .getElementById("urlInput")
-            .value.split("\n")
-            .map((url) => url.trim())
-            .filter((url) => url);
-
-        if (urls.length === 0) {
-            alert("Please enter at least one LinkedIn URL");
-            return;
-        }
-
-        for (let url of urls) {
-            chrome.tabs.create({ url, active: false }, (tab) => {
-                const checkTabLoaded = setInterval(() => {
-                    chrome.tabs.get(tab.id, (updatedTab) => {
-                        if (updatedTab?.status === "complete") {
-                            clearInterval(checkTabLoaded);
-                            chrome.scripting.executeScript({
-                                target: { tabId: tab.id },
-                                files: ["content.js"],
-                            });
-                        }
-                    });
-                }, 1000);
-            });
-        }
+    // Wait for page load
+    await new Promise((resolve) => {
+        if (document.readyState === "complete") return resolve();
+        window.addEventListener("load", resolve);
     });
 
-    document
-        .getElementById("clearDataBtn")
-        ?.addEventListener("click", async () => {
-            try {
-                const confirmed = confirm(
-                    "Are you sure you want to permanently delete all saved profile data?"
-                );
-                if (!confirmed) return;
+    // Helper to extract number from string
+    function extractNumber(text) {
+        if (!text) return 0;
+        const match = text.replace(/,/g, "").match(/\d+/);
+        return match ? parseInt(match[0]) : 0;
+    }
 
-                const res = await fetch("http://localhost:5000/api/profiles", {
-                    method: "DELETE",
-                });
-                const json = await res.json();
+    // More robust selectors for LinkedIn profile data
+    const name = document.querySelector('h1')?.innerText?.trim() 
+        || document.querySelector('[data-anonymize="person-name"]')?.innerText?.trim()
+        || document.querySelector('.text-heading-xlarge')?.innerText?.trim() 
+        || "";
 
-                if (res.ok) {
-                    alert("All profile data has been successfully deleted.");
-                    fetchAndDisplayProfiles();
-                } else {
-                    throw new Error(json.error || "Unknown error occurred");
-                }
-            } catch (err) {
-                alert("Failed to delete data: " + err.message);
-                console.error("Delete error:", err);
+    const headline = document.querySelector('.text-body-medium')?.innerText?.trim()
+        || document.querySelector('[data-anonymize="headline"]')?.innerText?.trim()
+        || document.querySelector('.break-words')?.innerText?.trim()
+        || "";
+
+    const location = document.querySelector('.text-body-small')?.innerText?.trim()
+        || document.querySelector('[data-anonymize="location"]')?.innerText?.trim()
+        || "";
+
+    // Get connections & followers with more flexible approach
+    let connection_count = 0;
+    let follower_count = 0;
+
+    const spans = Array.from(document.querySelectorAll("span"));
+
+    const connectionSpan = spans.find(el => /connections?/i.test(el.innerText));
+    if (connectionSpan) {
+        connection_count = extractNumber(connectionSpan.innerText);
+        if (connectionSpan.innerText.includes("500")) connection_count = 500;
+    }
+
+    const followerSpan = spans.find(el => /followers?/i.test(el.innerText));
+    if (followerSpan) {
+        follower_count = extractNumber(followerSpan.innerText);
+    }
+
+    // Get about section with multiple fallback strategies
+    let about = "";
+    const aboutSelectors = [
+        'section[data-section="summary"] .pv-shared-text-with-see-more',
+        'section.pv-about-section .pv-shared-text-with-see-more',
+        '[data-section="about"] .inline-show-more-text',
+        '.pv-about__summary-text',
+        'section.artdeco-card .inline-show-more-text'
+    ];
+
+    for (const selector of aboutSelectors) {
+        const aboutElement = document.querySelector(selector);
+        if (aboutElement && aboutElement.innerText.trim()) {
+            about = aboutElement.innerText.trim();
+            break;
+        }
+    }
+
+    // Get meta description (fallback bio)
+    const bio = document.querySelector('meta[name="description"]')?.content || "";
+
+    const profileData = {
+        name,
+        headline,
+        location,
+        connection_count,
+        follower_count,
+        about,
+        bio,
+        url: window.location.href
+    };
+
+    console.log("🔍 Scraped Profile:", profileData);
+
+    // Validate that we got some meaningful data
+    if (!name && !headline) {
+        console.warn("⚠️ No profile data found - page might not be fully loaded or selectors need updating");
+        return;
+    }
+
+    // Send to backend via background script messaging
+    try {
+        console.log("📤 Sending data to background script...");
+        
+        // Use Chrome messaging to send data to background script
+        chrome.runtime.sendMessage({
+            action: "sendProfileData",
+            data: profileData
+        }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.error("❌ Messaging error:", chrome.runtime.lastError.message);
+            } else {
+                console.log("✅ Data sent to background script successfully");
             }
         });
-});
-
-let isFetching = false;
-
-async function fetchAndDisplayProfiles() {
-    if (isFetching) return;
-    isFetching = true;
-
-    try {
-        const res = await fetch("http://localhost:5000/api/profiles");
-        const profiles = await res.json();
-        const list = document.getElementById("profileList");
-        list.innerHTML = "";
-
-        if (!Array.isArray(profiles) || profiles.length === 0) {
-            list.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">📋</div>
-          <div class="empty-state-text">No profiles collected yet</div>
-          <div class="empty-state-subtext">Add LinkedIn URLs above and click "Start Collection Process"</div>
-        </div>
-      `;
-            isFetching = false;
-            return;
-        }
-
-        const seen = new Set();
-        const uniqueProfiles = profiles.filter((p) => {
-            const key = p.url || p.name;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-
-        uniqueProfiles.forEach((p) => {
-            const item = document.createElement("div");
-            item.className = "profile-card";
-            item.innerHTML = `
-        <div class="profile-name">${p.name || "Name not available"}</div>
-        <div class="profile-headline">${p.headline || "No headline provided"
-                }</div>
-        <div class="profile-location">${p.location || "Location not specified"
-                }</div>
-        <div class="profile-stats">
-           ${p.connection_count > 500 ? "500+" : p.connection_count || 0} connections • 
-           ${p.follower_count || 0} followers
-        </div>
-
-
-        ${p.bio
-                    ? `
-          <div class="profile-section">
-            <div class="profile-section-label">Bio</div>
-            <div class="profile-section-content">${p.bio}</div>
-          </div>
-        `
-                    : ""
-                }
-
-        ${p.about
-                    ? `
-          <div class="profile-section">
-            <div class="profile-section-label">About</div>
-            <div class="profile-section-content">${p.about}</div>
-          </div>
-        `
-                    : ""
-                }
-
-        <div class="profile-divider"></div>
-        <button class="delete-btn" data-id="${p.id}">Remove Profile</button>
-      `;
-            list.appendChild(item);
-        });
-
-        document.querySelectorAll(".delete-btn").forEach((btn) => {
-            btn.addEventListener("click", async (e) => {
-                const profileId = e.target.getAttribute("data-id");
-                if (confirm("Are you sure you want to remove this profile?")) {
-                    try {
-                        const res = await fetch(
-                            `http://localhost:5000/api/profiles/${profileId}`,
-                            {
-                                method: "DELETE",
-                            }
-                        );
-                        const json = await res.json();
-
-                        if (res.ok) {
-                            alert(json.message || "Profile deleted successfully.");
-                            fetchAndDisplayProfiles();
-                        } else {
-                            throw new Error(json.error || "Failed to delete");
-                        }
-                    } catch (err) {
-                        alert("Failed to delete profile: " + err.message);
-                        console.error("Profile deletion error:", err);
-                    }
-                }
-            });
-        });
-    } catch (error) {
-        console.error("Error fetching profiles:", error);
-        document.getElementById("profileList").innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">⚠️</div>
-        <div class="empty-state-text">Error loading profiles</div>
-        <div class="empty-state-subtext">Please check your connection and try again</div>
-      </div>
-    `;
-    } finally {
-        isFetching = false;
+        
+    } catch (err) {
+        console.error("❌ Failed to send data:", err);
+        console.error("❌ Make sure your extension is properly loaded");
     }
-}
+})();

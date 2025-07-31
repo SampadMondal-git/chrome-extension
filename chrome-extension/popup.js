@@ -24,9 +24,16 @@ document.addEventListener("DOMContentLoaded", fetchAndDisplayProfiles);
 
 async function fetchAndDisplayProfiles() {
     try {
+        console.log("🔄 Fetching profiles from backend...");
         const res = await fetch("http://localhost:5000/api/profiles");
+        console.log("📡 Response status:", res.status, res.statusText);
+        
         const profiles = await res.json();
+        console.log("📊 Received profiles:", profiles);
+        console.log("📊 Number of profiles:", profiles.length);
+        
         const list = document.getElementById("profileList");
+        console.log("🎯 Profile list element:", list);
 
         if (profiles.length === 0) {
             list.innerHTML = `
@@ -40,7 +47,9 @@ async function fetchAndDisplayProfiles() {
         }
 
         list.innerHTML = "";
-        profiles.forEach(p => {
+        console.log("✅ Displaying", profiles.length, "profiles");
+        profiles.forEach((p, index) => {
+            console.log(`📝 Processing profile ${index + 1}:`, p);
             const item = document.createElement("div");
             item.className = "profile-card";
             item.innerHTML = `
@@ -95,7 +104,8 @@ async function fetchAndDisplayProfiles() {
         });
 
     } catch (error) {
-        console.error('Error fetching profiles:', error);
+        console.error('❌ Error fetching profiles:', error);
+        console.error('❌ Error details:', error.message);
         document.getElementById("profileList").innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">⚠️</div>
