@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Profile Manager</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <main class="container">
+        <!-- Header Section -->
+        <header class="header">
+            <h1>LinkedIn Profile Manager</h1>
+        </header>
+
+        <!-- LinkedIn Auto Engagement Section -->
+        <section class="engagement-section">
+            <div class="section-divider"></div>
+            <h2 class="section-header">LinkedIn Auto Engagement</h2>
+            <form class="engagement-form">
+                <div class="input-row">
+                    <div class="input-group">
+                        <label class="form-label" for="likeCount">Like Count</label>
+                        <input type="number" id="likeCount" class="form-input" 
+                               placeholder="0" min="0" max="50" 
+                               aria-describedby="like-help">
+                        <small id="like-help" class="input-help">Max 50 likes</small>
+                    </div>
+                    <div class="input-group">
+                        <label class="form-label" for="commentCount">Comment Count</label>
+                        <input type="number" id="commentCount" class="form-input" 
+                               placeholder="0" min="0" max="20"
+                               aria-describedby="comment-help">
+                        <small id="comment-help" class="input-help">Max 20 comments</small>
+                    </div>
+                </div>
+                <button type="button" id="startEngagementBtn" class="btn btn-primary" disabled>
+                    Start LinkedIn Engagement
+                </button>
+                <div class="engagement-status" id="engagementStatus" role="status" aria-live="polite"></div>
+            </form>
+        </section>
+
+        <!-- Profile Collection Section -->
+        <section class="collection-section">
+            <div class="section-divider"></div>
+            <h2 class="section-header">Profile Data Collection</h2>
+            <div class="form-section">
+                <label class="form-label" for="urlInput">LinkedIn Profile URLs</label>
+                <textarea id="urlInput" class="form-textarea" 
+                          placeholder="Enter valid LinkedIn profile URLs here, one per line (minimum 3 required)"
+                          rows="4" aria-describedby="url-help"></textarea>
+            </div>
+
+            <div class="button-group">
+                <button id="scrapeBtn" class="btn btn-primary">
+                    Start Collection Process
+                </button>
+                <button id="refreshBtn" class="btn btn-secondary">
+                    Get Profile Data
+                </button>
+                <button id="clearDataBtn" class="btn btn-danger">
+                    Clear All Saved Data
+                </button>
+            </div>
+        </section>
+
+        <!-- Collected Profiles Display Section -->
+        <section class="profiles-section">
+            <h2 class="section-header">Collected Profiles</h2>
+            <div id="profileList" class="profile-list" role="region" aria-label="Collected profiles">
+                <div class="empty-state">
+                    <div class="empty-state-icon" aria-hidden="true">📋</div>
+                    <div class="empty-state-text">No profiles collected yet</div>
+                    <div class="empty-state-subtext">
+                        Add LinkedIn URLs above and click "Start Collection Process"
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2025 LinkedIn Profile Manager | Developed by Sampad Mondal</p>
+    </footer>
+
+    <script src="popup.js"></script>
+</body>
+</html>
